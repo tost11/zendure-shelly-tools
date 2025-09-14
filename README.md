@@ -58,4 +58,46 @@ After that the Device should show up in your WIFI-Network after that you kann us
 Use the official documentation for that: https://github.com/Zendure/zenSDK
 
 ## Scripts for Shelly
-coming soon
+
+To run the Scripts copy them into Shelly script page, start them and enable automatic run on restart of shelly
+
+### Power Script
+
+The power script is: [check_script_running.js](check_script_running.js)
+
+It checks the current power of the shelly and compaers it with the pwoer of the zendure device. After that the new value
+is applied via rest to the device.
+
+Edit variables (written in caps) on beginning of script to fit your own setup.
+
+#### Variables
+
+| Column 1  | Column 2                                 |
+|-----------|------------------------------------------|
+| HOST      | Host or                                  |
+| SERIAL    | SN of Zendure Device                     |
+| MAX_POWER | Maximum power to apply to Zendure device |
+| DEBUG     | print debug messages                     |
+
+#### Additional feature
+- Requests current value of Zendure device only when needed (to old)
+- power change under 5w is ignored
+- sends value only every 5 seconds, more often leads into fluctuation (maby more often will work, check for yourself)
+- concurrency is checked, only one process runs at on time
+- check if it stuck by itself (for maybe done implementation error)
+
+### Restart script
+
+The check other script script is: [check_script_running.js](check_script_running.js)
+
+If an unhandled error in the previous script appears, it will not continue applying power, so the next script if it
+is not running and restart it if so.
+
+#### Variables
+
+| Column 1           | Column 2                                         |
+|--------------------|--------------------------------------------------|
+| TARGET_SCRIPT_NAME | Name of the Zendure power script                 |
+| CHECK_INTERVAL_MS  | Time in Milliseconds until nex check is performed |
+| DEBUG              | print debug messages                             |
+
