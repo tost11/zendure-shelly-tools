@@ -4,7 +4,7 @@ let DEBUG = false;
 
 function log(message, debug) {
     if (!debug || DEBUG) {
-        print("[" + Shelly.getUptimeMs() + "Script Restart Checker]: " + message);
+        print("[" + Shelly.getUptimeMs() + " Script Restart Checker]: " + message);
     }
 }
 

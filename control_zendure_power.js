@@ -15,7 +15,7 @@ let lastRunningStarted = 0;
 
 function log(message,debug){
     if(!debug || DEBUG){
-        print("[" + Shelly.getUptimeMs() + "Zendure Power Script ]: "+message);
+        print("[" + Shelly.getUptimeMs() + " Zendure Power Script ]: "+message);
     }
 }
 
