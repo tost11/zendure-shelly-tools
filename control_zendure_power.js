@@ -1,21 +1,22 @@
 let HOST = "INSERT ZENDURE DEVICE IP OR HOSTNAME HERE" //could be "zendure" on default
 let SERIAL = "INSERT SERIAL FROM DEVICE HERE";
-let MAX_POWER = 800;
 let DEBUG = false;
+let MAX_POWER = 800;
+let MAX_POWER_REVERSE = 2400;
+let REVERSE = true;
+let REVERSE_STARTUP_POWER = -10;
 
-//last set power (so it is not requested every time)
 let currentZendurePower = null;
 let lastRunTime = null;
-//current (last) power of shelly, because script run onyl every 5 seconds (more often -> power fluctuates)
 let lastShellyPower = null;
-//do not allow two execution to the same time
+//dotn allow two execution to the same time
 let isRunning = false;
-//timer for implementation error (is isRunning stuck on true)
+//timer for impelmentaton error (is isRunning stuck on true)
 let lastRunningStarted = 0;
 
 function log(message,debug){
     if(!debug || DEBUG){
-        print("[" + Shelly.getUptimeMs() + " Zendure Power Script ]: "+message);
+        print("[" + Shelly.getUptimeMs() + " Zendure Power Script]: "+message);
     }
 }
 
@@ -25,7 +26,8 @@ function getTimeDiff(){
         return null;
     }
     let now = Shelly.getUptimeMs();
-    return now - localLastRunTime;
+    let dif = now - localLastRunTime;
+    return dif;
 }
 
 function setCurrentPower(power){
@@ -37,23 +39,49 @@ function setCurrentPower(power){
     }
 }
 
+function isBelowReversePower(shellyPower, currentDevicePower){
+    if(!REVERSE || currentDevicePower == nll || shellyPower == null){
+        return false;
+    }
+    let combinedLimit = shellyPower + currentDevicePower;
+    return currentDevicePower >= 0 && combinedLimit > REVERSE_STARTUP_POWER && combinedLimit < 0;
+}
+
 function setLimit(shellyPower,currentDevicePower){
     log("Current Zendure power is: " + currentDevicePower + "W", true);
 
-    let combinedLimit = shellyPower + currentDevicePower;
-    combinedLimit = Math.max(combinedLimit,0);
-    combinedLimit = Math.min(combinedLimit,MAX_POWER);
+    let acMode = 2;
+    let inputLimit = 0;
+    let outputLimit = 0;
 
+    let combinedLimit = shellyPower + currentDevicePower;
+
+    if(isBelowReversePower(shellyPower,currentDevicePower)){
+        combinedLimit = 0;//set to zero so no wabbling appears
+    }
+
+    if(!REVERSE || combinedLimit >= 0){
+        outputLimit = Math.max(combinedLimit,0);
+        outputLimit = Math.min(outputLimit,MAX_POWER);
+    }else{
+        acMode = 1;
+        inputLimit = Math.min(combinedLimit,MAX_POWER_REVERSE);
+        inputLimit *= -1;
+    }
+
+    combinedLimit = inputLimit + outputLimit;
     log("new Zendure power is: " + combinedLimit + "W",true);
 
     let payload = {
         sn: SERIAL,
         properties: {
-            acMode: 2,
-            outputLimit: combinedLimit
+            acMode: acMode,
+            outputLimit: outputLimit,
+            inputLimit: inputLimit,
         }
     };
 
+    log("Send POST data:" + JSON.stringify(payload),true);
     Shelly.call("HTTP.POST", {
         url: "http://" + HOST + "/properties/write",
         headers: {
@@ -96,7 +124,7 @@ function runScript() {
         return
     }
 
-    if(Math.abs(shellyPower) < 5){
+    if(Math.abs(shellyPower) < 5 || isBelowReversePower(shellyPower,currentZendurePower)){
         log("current power is fine",true);
 
         if(diff == null || diff > 20 * 1000){
@@ -119,8 +147,14 @@ function runScript() {
                 }
                 let response = JSON.parse(result.body || "{}");
                 if (response.properties && typeof response.properties.outputLimit === "number") {
-                    log("Got from response: " + response.properties.outputLimit,true);
-                    setLimit(shellyPower,response.properties.outputLimit);
+                    let gotLimit = 0;
+                    if(response.properties.acMode == 2){
+                        gotLimit = response.properties.outputLimit;
+                    }else{
+                        gotLimit = response.properties.inputLimit * -1;
+                    }
+                    log("Got from response: " + gotLimit,true);
+                    setLimit(shellyPower,gotLimit);
                 } else {
                     log("Could not get value from request response",false);
                 }
@@ -138,10 +172,10 @@ Shelly.addStatusHandler(function (event) {
     }
 });
 
-//run every 5 seconds
+//run adjustment every 5 seconds
 Timer.set(5000, true, runScript, null);
 
-//check if successfully request was send at least in the last 1 minute
+//check if successfull reqeust was send at least in the last 1 minute
 Timer.set(1000, true, function (){
     let dif = getTimeDiff();
     if(dif == null){
