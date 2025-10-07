@@ -2,7 +2,7 @@ let HOST = "INSERT ZENDURE DEVICE IP OR HOSTNAME HERE" //could be "zendure" on d
 let SERIAL = "INSERT SERIAL FROM DEVICE HERE";
 let DEBUG = false;
 let MAX_POWER = 800;
-let MAX_POWER_REVERSE = 2400;
+let MAX_POWER_REVERSE = -1000;
 let REVERSE = true;
 let REVERSE_STARTUP_POWER = -10;
 
@@ -13,6 +13,10 @@ let lastShellyPower = null;
 let isRunning = false;
 //timer for impelmentaton error (is isRunning stuck on true)
 let lastRunningStarted = 0;
+let bypass = false;
+let soc = 50;
+let maxSoc = 100;
+let minSoc = 0;
 
 function log(message,debug){
     if(!debug || DEBUG){
@@ -39,14 +43,6 @@ function setCurrentPower(power){
     }
 }
 
-function isBelowReversePower(shellyPower, currentDevicePower){
-    if(!REVERSE || currentDevicePower == nll || shellyPower == null){
-        return false;
-    }
-    let combinedLimit = shellyPower + currentDevicePower;
-    return currentDevicePower >= 0 && combinedLimit > REVERSE_STARTUP_POWER && combinedLimit < 0;
-}
-
 function setLimit(shellyPower,currentDevicePower){
     log("Current Zendure power is: " + currentDevicePower + "W", true);
 
@@ -56,8 +52,13 @@ function setLimit(shellyPower,currentDevicePower){
 
     let combinedLimit = shellyPower + currentDevicePower;
 
-    if(isBelowReversePower(shellyPower,currentDevicePower)){
+    if(currentDevicePower >= 0 && combinedLimit > REVERSE_STARTUP_POWER && combinedLimit < 0){
         combinedLimit = 0;//set to zero so no wabbling appears
+    }
+
+    if(bypass == true){
+        log("Do not set real limit bypass is enabled",true);
+        combinedLimit = shellyPower;
     }
 
     if(!REVERSE || combinedLimit >= 0){
@@ -65,12 +66,12 @@ function setLimit(shellyPower,currentDevicePower){
         outputLimit = Math.min(outputLimit,MAX_POWER);
     }else{
         acMode = 1;
-        inputLimit = Math.min(combinedLimit,MAX_POWER_REVERSE);
+        inputLimit = Math.max(combinedLimit,MAX_POWER_REVERSE);
         inputLimit *= -1;
     }
 
-    combinedLimit = inputLimit + outputLimit;
-    log("new Zendure power is: " + combinedLimit + "W",true);
+    combinedLimit = (inputLimit * -1) + outputLimit;
+    log("new calculated Zendure power is: " + combinedLimit,false);
 
     let payload = {
         sn: SERIAL,
@@ -92,12 +93,14 @@ function setLimit(shellyPower,currentDevicePower){
         if (err_code === 0) {
             log("POST erfolgreich:" + postResult.body,true);
             setCurrentPower(combinedLimit);
-            log("Set power of Zendure device to: " + combinedLimit,false);
+            log("Set power on Zendure device to: " + combinedLimit,false);
         } else {
             log("Fehler beim POST:" + err_code + " " + err_msg,false);
         }
     });
 }
+
+
 
 function runScript() {
     if(isRunning && Shelly.getUptimeMs() - lastRunningStarted < 60 * 1000){
@@ -124,7 +127,7 @@ function runScript() {
         return
     }
 
-    if(Math.abs(shellyPower) < 5 || isBelowReversePower(shellyPower,currentZendurePower)){
+    if(Math.abs(shellyPower) < 5 || (currentZendurePower >= 0 && shellyPower < 0 && shellyPower > REVERSE_STARTUP_POWER)){
         log("current power is fine",true);
 
         if(diff == null || diff > 20 * 1000){
@@ -136,8 +139,12 @@ function runScript() {
     }
 
     let localZendurePower = currentZendurePower;
-    if(localZendurePower == null){
-        log("Current Zendure power unkonwn -> get it",false);
+    if(localZendurePower == null || soc-2 < minSoc || soc+2 > maxSoc){//soc check need for extra fetch bypass status
+        if(localZendurePower == null){
+            log("Current Zendure power unkonwn -> get it",false);
+        }else{
+            log("Fetch current zendure powe because near min or max level (bypass status needed)",false);
+        }
         Shelly.call("HTTP.GET", { url: "http://" + HOST + "/properties/report" },
             function(result, err_code, err_msg) {
                 if (err_code !== 0) {
@@ -146,13 +153,17 @@ function runScript() {
                     return;
                 }
                 let response = JSON.parse(result.body || "{}");
-                if (response.properties && typeof response.properties.outputLimit === "number") {
+                if (response.properties) {
                     let gotLimit = 0;
                     if(response.properties.acMode == 2){
                         gotLimit = response.properties.outputLimit;
                     }else{
                         gotLimit = response.properties.inputLimit * -1;
                     }
+                    bypass = response.properties.packState == 0;
+                    soc = response.properties.electricLevel;
+                    maxSoc = response.properties.socSet / 10;
+                    minSoc = response.properties.minSoc / 10;
                     log("Got from response: " + gotLimit,true);
                     setLimit(shellyPower,gotLimit);
                 } else {
@@ -176,7 +187,7 @@ Shelly.addStatusHandler(function (event) {
 Timer.set(5000, true, runScript, null);
 
 //check if successfull reqeust was send at least in the last 1 minute
-Timer.set(1000, true, function (){
+Timer.set(5000, true, function (){
     let dif = getTimeDiff();
     if(dif == null){
         return;
@@ -186,4 +197,28 @@ Timer.set(1000, true, function (){
         //zendure value is to old -> delete
         setCurrentPower(null);
     }
+}, null);
+
+//check pack state and other statistics
+Timer.set(1000 * 30, true, function (){
+    log("Timed Check Zendure -> check status",false);
+    Shelly.call("HTTP.GET", { url: "http://" + HOST + "/properties/report" },
+        function(result, err_code, err_msg) {
+            if (err_code === 0) {
+                //log("Timed Check Zendure -> successfull:" + result.body,true);
+                let response = JSON.parse(result.body || "{}");
+                if (response.properties) {
+                    bypass = response.properties.packState == 0;
+                    soc = response.properties.electricLevel;
+                    maxSoc = response.properties.socSet / 10;
+                    minSoc = response.properties.minSoc / 10;
+                    log("Timed Check Zendure -> bypass is: " + bypass,true);
+                }else{
+                    log("Timed Check Zendure -> could not parse json response: " + bypass,false);
+                }
+            } else {
+                log("Timed Check Zendure -> error: " + err_code + " " + err_msg,false);
+            }
+        }
+    );
 }, null);
