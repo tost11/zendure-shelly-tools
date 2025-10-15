@@ -71,24 +71,54 @@ is applied via rest to the device.
 Edit variables (written in caps) on beginning of script to fit your own setup.
 
 #### Variables
+To configure the script for your desire it is possible to set the following values.
 
-| Column 1  | Column 2                                 |
-|-----------|------------------------------------------|
-| HOST      | Host or                                  |
-| SERIAL    | SN of Zendure Device                     |
-| MAX_POWER | Maximum power to apply to Zendure device |
-| DEBUG     | print debug messages                     |
+| Name                  | functionality                                                             |
+|-----------------------|---------------------------------------------------------------------------|
+| HOST                  | Hostname of ip adress                                                     |
+| MAC                   | Mac-Adress of device                                                      |
+| SERIAL                | SN of Zendure Device                                                      |
+| MAX_POWER             | Maximum power to apply to Zendure device                                  |
+| MAX_POWER_REVERSE     | Max Power to change from grid **negative value**                          |
+| REVERSE               | enable charging from grid if mor power is available (additional inverter) |
+| REVERSE_STARTUP_POWER | min negative power to begin charging from grid  **negative value**        |
+| DEBUG                 | print debug messages                                                      |
 
-#### Additional feature
-- Requests current value of Zendure device only when needed (to old)
-- power change under 5w is ignored
+The HOST and MAC variables are not needed if the other one is set. The HOST is needed if the device is connected
+to the Home-Wifi. The MAC variable is used if the device is connected to the Shelly AP-Network.
+
+The Mac to Ip resolving in the second case is needed because the shelly do not work with hostnames and resolving
+for that. With the mac a static identification for the device is possible.
+
+#### Intervals
+For advanced usage it is possible to adjust the following values.
+All intervals are defined in Seconds.
+
+| Name                          | functionality                                            |
+|-------------------------------|----------------------------------------------------------|
+| INTERVAL_RESOLVE_MAC          | Interval mac will be resolved to ip                      |
+| INTERVAL_CHECK_ZENDURE_STATUS | Interval a status check will be performed on device      |
+| INTERVAL_DEVICE_OFFLINE       | Time after device will be regarded as offline            |
+| INTERVAL_RUN_MAIN_SCRIPT      | Interval the main script with setting limit is performed |
+
+**Do not set the INTERVAL_RUN_MAIN_SCRIPT under the value of 5 Seconds!**
+The device needs some time to adjust the power. If set more often this will leed into oscillating values.
+
+#### feature set
+- Requests current value of device only when needed (to old)
 - sends value only every 5 seconds, more often leads into fluctuation (maby more often will work, check for yourself)
 - concurrency is checked, only one process runs at on time
 - check if it stuck by itself (for maybe done implementation error)
+- recognizes if device is in bypass mode (empty and low charge power, or full and overflow is send to grid)
+- uses available power from grid and charges storage (when another inverter is used in parallel)
+- resolves mac to ip if device is connected local to shelly Ap-Network
+
+#### limitations
+- power change under 5w is ignored
 
 ### Restart script
 
-The check other script script is: [check_script_running.js](check_script_running.js)
+The check other script is: [check_script_running.js](check_script_running.js)
 
 If an unhandled error in the previous script appears, it will not continue applying power, so the next script if it
 is not running and restart it if so.

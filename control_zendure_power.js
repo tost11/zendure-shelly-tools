@@ -1,10 +1,16 @@
-let HOST = "INSERT ZENDURE DEVICE IP OR HOSTNAME HERE" //could be "zendure" on default
-let SERIAL = "INSERT SERIAL FROM DEVICE HERE";
+let HOST = "SET_IP_HERE" //use if in home wifi if not leave blank
+let MAC = "SET_MAC_HERE" //use if in shelly wifi if not leave blank
 let DEBUG = false;
+let SERIAL = "DEVICE_SERIAL_HERE";
 let MAX_POWER = 800;
 let MAX_POWER_REVERSE = -1000;
 let REVERSE = true;
 let REVERSE_STARTUP_POWER = -10;
+
+let INTERVAL_RESOLVE_MAC = 30;
+let INTERVAL_CHECK_ZENDURE_STATUS = 30;
+let INTERVAL_DEVICE_OFFLINE = 60;
+let INTERVAL_RUN_MAIN_SCRIPT = 5;
 
 let currentZendurePower = null;
 let lastRunTime = null;
@@ -71,7 +77,7 @@ function setLimit(shellyPower,currentDevicePower){
     }
 
     combinedLimit = (inputLimit * -1) + outputLimit;
-    log("new calculated Zendure power is: " + combinedLimit,false);
+    log("new Zendure power is: " + combinedLimit + "W",false);
 
     let payload = {
         sn: SERIAL,
@@ -82,7 +88,7 @@ function setLimit(shellyPower,currentDevicePower){
         }
     };
 
-    log("Send POST data:" + JSON.stringify(payload),true);
+    log("Send POST data:" + JSON.stringify(payload),false);
     Shelly.call("HTTP.POST", {
         url: "http://" + HOST + "/properties/write",
         headers: {
@@ -93,7 +99,7 @@ function setLimit(shellyPower,currentDevicePower){
         if (err_code === 0) {
             log("POST erfolgreich:" + postResult.body,true);
             setCurrentPower(combinedLimit);
-            log("Set power on Zendure device to: " + combinedLimit,false);
+            log("Set power of Zendure device to: " + combinedLimit,false);
         } else {
             log("Fehler beim POST:" + err_code + " " + err_msg,false);
         }
@@ -103,6 +109,11 @@ function setLimit(shellyPower,currentDevicePower){
 
 
 function runScript() {
+    if(typeof HOST !== 'string' || HOST == ""){
+        log("Timed Check Zendure -> Hostname or ip not set",false);
+        return;
+    }
+
     if(isRunning && Shelly.getUptimeMs() - lastRunningStarted < 60 * 1000){
         log("Skipped execution still one running: " + (Shelly.getUptimeMs() - lastRunningStarted),false);
         return;
@@ -143,7 +154,7 @@ function runScript() {
         if(localZendurePower == null){
             log("Current Zendure power unkonwn -> get it",false);
         }else{
-            log("Fetch current zendure powe because near min or max level (bypass status needed)",false);
+            log("Fetch current zendure powe because near min or max level (bypass status needed)",true);
         }
         Shelly.call("HTTP.GET", { url: "http://" + HOST + "/properties/report" },
             function(result, err_code, err_msg) {
@@ -184,7 +195,7 @@ Shelly.addStatusHandler(function (event) {
 });
 
 //run adjustment every 5 seconds
-Timer.set(5000, true, runScript, null);
+Timer.set(INTERVAL_RUN_MAIN_SCRIPT * 1000, true, runScript, null);
 
 //check if successfull reqeust was send at least in the last 1 minute
 Timer.set(5000, true, function (){
@@ -192,7 +203,7 @@ Timer.set(5000, true, function (){
     if(dif == null){
         return;
     }
-    if(dif > 60 * 1000){
+    if(dif > INTERVAL_DEVICE_OFFLINE * 1000){
         log("Zendure limit to old -> reset (maybe offline)",false);
         //zendure value is to old -> delete
         setCurrentPower(null);
@@ -200,8 +211,12 @@ Timer.set(5000, true, function (){
 }, null);
 
 //check pack state and other statistics
-Timer.set(1000 * 30, true, function (){
+Timer.set(INTERVAL_CHECK_ZENDURE_STATUS * 1000, true, function (){
     log("Timed Check Zendure -> check status",false);
+    if(typeof HOST !== 'string' || HOST == ""){
+        log("Timed Check Zendure -> Hostname or ip not set",false);
+        return;
+    }
     Shelly.call("HTTP.GET", { url: "http://" + HOST + "/properties/report" },
         function(result, err_code, err_msg) {
             if (err_code === 0) {
@@ -222,3 +237,32 @@ Timer.set(1000 * 30, true, function (){
         }
     );
 }, null);
+
+// Funktion: prüfe Clients nach MAC-Adresse
+function resolveMacToIp() {
+    Shelly.call("WiFi.ListAPClients", {}, function(res, err) {
+        if (err !== 0) {
+            log("Mac Resolving -> Fehler bei WiFi.ListAPClients: Fehlercode " + err,false);
+            return;
+        }
+        if (!res || !res.ap_clients) {
+            log("Mac Resolving -> No clients available",true);
+            return;
+        }
+        for (let c of res.ap_clients) {
+            let mac = (c.mac || "").toUpperCase();
+            log("Mac Resolving -> Check‑Device with mac: " + mac + " IP: " + c.ip,true);
+            if (mac === MAC.toUpperCase()) {
+                print("Mac Resolving -> Device‑MAC found: " + mac + " IP: " + c.ip);
+                HOST = c.ip;
+                return;  // wenn gefunden, beende die Schleife (oder setze fort, falls mehrere)
+            }
+        }
+        log("Mac Resolving -> MAC-Adress: " + MAC + "could not be resolved",true);
+    });
+}
+
+if(typeof MAC == 'string' && MAC != ""){
+    log("Timed Check Zendure -> Hostname or ip not set",false);
+    Timer.set(INTERVAL_RESOLVE_MAC * 1000, true, resolveMacToIp);
+}
