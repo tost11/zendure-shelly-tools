@@ -7,12 +7,12 @@
 // OpenDTU connection (use either HOST or MAC)
 let HOST = "192.168.178.2";               // IP address or hostname of OpenDTU (leave empty if using MAC)
 let MAC = "";                             // MAC address for auto-resolution (only for Shelly AP mode)
-let PORT = 80;                            // Port (usually 80)
+let PORT = 80;                           // Port (usually 80)
 let AUTH_PASSWORD = "openDTU42";          // Admin password (if authentication is enabled)
 
 // Inverter configuration
-let INVERTER_SERIAL = "1234567890";     // Serial number of the inverter
-let INVERTER_MANUFACTURER = "Hoymiles";   // Manufacturer name (e.g., "Hoymiles", "DeyeSun", "HoymilesW") only needed if on fork https://github.com/tost11/OpenDTU-Push-Rest-API-and-Deye-Sun
+let INVERTER_SERIAL = "1234567890";        // Serial number of the inverter
+let INVERTER_MANUFACTURER = "Hoymiles";    // Manufacturer name (e.g., "Hoymiles", "DeyeSun", "HoymilesW") only needed if on fork https://github.com/tost11/OpenDTU-Push-Rest-API-and-Deye-Sun
 let MAX_INVERTER_POWER = 600;             // Maximum inverter power in watts (on some serial total power not save determined so set here manually)
 let MAX_LIMIT_WATT = 200;                 // Maximum limit in watts (can be less than max power)
 let MIN_LIMIT_PERCENTAGE = 0;             // Min percentage limit send to device (some device handle 0% as 100% so min there neets to be 1%)
@@ -27,9 +27,9 @@ let INTERVAL_FETCH_CURRENT_LIMIT = 15;    // Interval when status fetch of inver
 let INPUT_DEVIDER = 1;                    // for inverter with mutiple solar inputs where not all are used the limit have to set to double value for example for 2T with only one connected the value is 1/2 = 0.5, for 4T with one input it is: 1/4 = 0.25 and so on. 1 is default for all inputs used. not needed if inverter has firmware dynamic input limitation (set to 1).
 
 // ==================== SCRIPT STATE ====================
-let currentInverterPower = null;          // Current inverter power in watts
-let lastRunTime = null;                   // Last time limit was set
-let lastShellyPower = null;               // Last measured Shelly power
+let currentInverterPower = null;             // Current inverter power in watts
+let lastRunTime = null;                      // Last time limit was set
+let lastShellyPower = null;                  // Last measured Shelly power
 let isRunning = false;                    // Prevents concurrent executions
 let lastRunningStarted = 0;               // Timestamp of last script start
 let lastSuccesfullSet = Shelly.getUptimeMs();
