@@ -63,7 +63,7 @@ To run the Scripts copy them into Shelly script page, start them and enable auto
 
 ### Power Script
 
-The power script is: [check_script_running.js](check_script_running.js)
+The power script is: [control_zendure_power.js](control_zendure_power.js)
 
 It checks the current power of the shelly and compaers it with the pwoer of the zendure device. After that the new value
 is applied via rest to the device.
