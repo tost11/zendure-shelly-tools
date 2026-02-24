@@ -6,7 +6,7 @@ Automation scripts for controlling the Zendure Solarflow 800 Pro without the off
 
 ## Project Components
 
-This project is organized into four main components:
+This project is organized into five main components:
 
 ### [zendure_bluetooth_connect/](zendure_bluetooth_connect/)
 Initial WiFi setup for Zendure devices via Bluetooth. Use this for first-time configuration or when changing networks. Includes Python script for configuring WiFi credentials without the official app.
@@ -16,6 +16,9 @@ Dynamic power control scripts for Shelly 3EM Pro that adjust Zendure inverter ou
 - Direct IP connection (home WiFi)
 - MAC address resolution (Shelly AP mode)
 - Automatic network scanning (dynamic discovery)
+
+### [zendure_online_monitoring/](zendure_online_monitoring/)
+Online monitoring scripts that send Zendure device data to an external monitoring system for visualization and analysis. Read-only scripts that collect solar power, battery status, and grid data. Three variants available matching the power control configurations.
 
 ### [opendtu_power_control/](opendtu_power_control/)
 OpenDTU inverter integration script that controls inverter power limits based on Shelly 3EM Pro measurements. Provides dynamic power adjustment for OpenDTU-compatible inverters.
@@ -37,13 +40,19 @@ Watchdog scripts for monitoring and automatically restarting crashed Shelly scri
 
    See [zendure_power_control/README.md](zendure_power_control/README.md)
 
-3. **Optional: Set Up Watchdog**
+3. **Optional: Set Up Online Monitoring**
 
-   Add automatic monitoring and restart capability for your power control scripts.
+   Send device data to an external monitoring system for visualization and long-term analysis.
+
+   See [zendure_online_monitoring/README.md](zendure_online_monitoring/README.md)
+
+4. **Optional: Set Up Watchdog**
+
+   Add automatic monitoring and restart capability for your scripts.
 
    See [shelly_script_checks/README.md](shelly_script_checks/README.md)
 
-4. **Optional: Add OpenDTU Control**
+5. **Optional: Add OpenDTU Control**
 
    Integrate OpenDTU inverter control if you have an OpenDTU-compatible inverter.
 

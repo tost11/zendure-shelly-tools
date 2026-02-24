@@ -231,8 +231,6 @@ Shelly.addStatusHandler(function (event) {
 
 Timer.set(INTERVAL_RUN_MAIN_SCRIPT * 1000, true, runScript, null);
 
-// Configuration: Set the Serial Number of the Zendure device to search for
-
 // -------------------- find device in network -------------------------------
 
 var networks = [];
@@ -419,7 +417,6 @@ function loadIpFromStorage(){
         Timer.set(1, false, startFindingDevice, null);
     }
 }
-
 
 //on run periodically
 Timer.set(INTERVAL_SCAN_NETWORK * 1000, true, startFindingDevice, null);
