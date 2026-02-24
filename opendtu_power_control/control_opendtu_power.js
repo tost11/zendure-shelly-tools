@@ -299,7 +299,7 @@ function fetchCurrentLimit() {
             }
         }
 
-        log("Serial not found: " + SERIAL, false);
+        log("Serial not found: " + INVERTER_SERIAL, false);
     });
 }
 

@@ -151,7 +151,7 @@ function setLimit(shellyPower,currentDevicePower){
 
 function runScript() {
     if(typeof host !== 'string' || host === ""){
-        log("Timed Check Zendure -> Hostname or ip not set",false);
+        log("Main script no run -> Hostname or ip not set, scanning?: " + scanRunning,false);
         return;
     }
 

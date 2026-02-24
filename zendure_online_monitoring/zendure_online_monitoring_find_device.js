@@ -165,7 +165,7 @@ function handlePostResult(domain,result, err_code, err_msg){
 
 function runScript() {
   if(typeof host !== 'string' || host === ""){
-    log("Timed Check Zendure -> Hostname or ip not set",false);
+    log("Main script no run -> Hostname or ip not set, scanning?: "+scanRunning,false);
     return;
   }
   Shelly.call("HTTP.GET", {url: "http://" + host + "/properties/report",timeout: 5},function(result, err_code, err_msg) {
