@@ -74,21 +74,13 @@ function setLimit(shellyPower,currentDevicePower){
 
     log("Combined limit is: " + combinedLimit + "W", true);
 
-    if(REVERSE && currentDevicePower > 0 && combinedLimit > (REVERSE_STARTUP_POWER * -1) && combinedLimit < 0){
-        //to not drectly swap from input to ouptu mode step with zero
+    if(currentDevicePower <= 0 && combinedLimit > 0 && combinedLimit <= STARTUP_POWER){
+        //not enoth to start up
         combinedLimit = 0;
     }
 
-    if(currentDevicePower < 0 && combinedLimit > STARTUP_POWER && combinedLimit > 0){
-        //to not drectly swap from input to ouptu mode step with zero
-        combinedLimit = 0;
-    }
-
-    if(currentDevicePower === 0 && combinedLimit > 0 && combinedLimit <= STARTUP_POWER){
-        combinedLimit = 0;
-    }
-
-    if(REVERSE && currentDevicePower === 0 && combinedLimit <0 && combinedLimit >= (REVERSE_STARTUP_POWER * -1)){
+    if(REVERSE && currentDevicePower >= 0 && combinedLimit < 0 && combinedLimit >= (REVERSE_STARTUP_POWER * -1)){
+        //no enoth to start up
         combinedLimit = 0;
     }
 
@@ -202,15 +194,15 @@ function runScript() {
         }
         if (response.properties && response.properties && response.product && response.sn === SERIAL) {
             lastSeenDevice = Shelly.getUptimeMs();
-            let gotLimit;
+            let gotLimit = 0;
+            log("got response, acMode: " + response.properties.acMode +", outputHome: " + response.properties.outputHomePower + ", inputHomePower: " + response.properties.gridInputPower,true);
             if(response.properties.acMode === 2){
                 //gotLimit = response.properties.outputLimit;
                 gotLimit = response.properties.outputHomePower;
-            }else{
+            }else if(response.properties.acMode === 1){
                 //gotLimit = response.properties.inputLimit * -1;
                 gotLimit = response.properties.gridInputPower * -1;
             }
-            log("Got from response: " + gotLimit,true);
             setLimit(shellyPower,gotLimit);
         } else {
             log("Could not get value from request response (maybe it is not a zendure response or Serial (SN) is wrong)",false);
