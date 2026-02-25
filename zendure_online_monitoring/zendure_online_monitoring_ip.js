@@ -60,7 +60,7 @@ function parseZendureData(resp) {
     packPowerOk = true;
   }
   if (typeof p.outputPackPower === "number") {
-    packPower = p.outputPackPower;
+    packPower += p.outputPackPower;
     packPowerOk = true;
   }
   if (packPowerOk){
