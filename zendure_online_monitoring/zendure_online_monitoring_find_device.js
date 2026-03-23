@@ -9,6 +9,7 @@ let ONLINE_CLIENT_TOKEN = undefined; //client secret token retrieved when settin
 let ONLINE_URL_1 = "https://solar.pihost.org";//first domain to send data to
 let ONLINE_URL_2 = "https://solar.tost-soft.de";//backup domain if first is down
 let ONLINE_DEVICE_ID = 1;//device id for online monitoring (only important if multiple device are in one system)
+let ONLINE_DEVICE_ID_SHELLY = 2;
 
 // interval in seconds search for power station in network
 let INTERVAL_SCAN_NETWORK = 15 * 60;//scan every 15 min
@@ -29,6 +30,8 @@ if(!SERIAL){throw new Error("Variable: SERIAL is required");}
 if(!DATA_DURATION){throw new Error("Variable: DATA_DURATION is required");}
 if(DATA_DURATION < 5){throw new Error("Variable: DATA_DURATION not allowed to be lower then 5 seconds");}
 if(ONLINE_DEVICE_ID <= 0){throw new Error("Variable: ONLINE_DEVICE_ID not allowed to be lower then 1");}
+if(ONLINE_DEVICE_ID_SHELLY <= 0){throw new Error("Variable: ONLINE_DEVICE_ID_SHELLY not allowed to be lower then 1");}
+if(ONLINE_DEVICE_ID_SHELLY == ONLINE_DEVICE_ID){throw new Error("Variable: ONLINE_DEVICE_ID can not be equal");}
 if(!ONLINE_SYSTEM_ID){throw new Error("Variable: ONLINE_SYSTEM_ID is required");}
 if(!ONLINE_URL_1){throw new Error("Variable: ONLINE_URL_1 is required");}
 if(!ONLINE_CLIENT_TOKEN){throw new Error("Variable: ONLINE_CLIENT_TOKEN is required");}
@@ -163,6 +166,70 @@ function handlePostResult(domain,result, err_code, err_msg){
   return false;
 }
 
+// Function to get and print the model information of the device
+function getShellyData(callback) {
+
+  Shelly.call("EM.GetStatus", {id:0}, function (ShellyEM) {
+    log("Device Info: " + JSON.stringify(ShellyEM),true);
+    Shelly.call("EMData.GetStatus", {id:0}, function (ShellyEMData) {
+      log("Device Info: " + JSON.stringify(ShellyEMData),true);
+
+      var shellyDevice = {
+        id: ONLINE_DEVICE_ID_SHELLY,
+        gridWatt: 0,
+        grids:[{
+          id:1
+        },{
+          id:2
+        },{
+          id:3
+        }]
+      };
+
+      if(ShellyEM){
+        if(ShellyEM.a_voltage > 1){
+          shellyDevice.grids[0].voltage = ShellyEM.a_voltage;
+          shellyDevice.grids[0].ampere = ShellyEM.a_current;
+          shellyDevice.grids[0].watt = ShellyEM.a_act_power;
+        }
+
+        if(ShellyEM.b_voltage > 1){
+          shellyDevice.grids[1].voltage = ShellyEM.b_voltage;
+          shellyDevice.grids[1].ampere = ShellyEM.b_current;
+          shellyDevice.grids[1].watt = ShellyEM.b_act_power;
+        }
+
+        if(ShellyEM.c_voltage > 1){
+          shellyDevice.grids[2].voltage = ShellyEM.c_voltage;
+          shellyDevice.grids[2].ampere = ShellyEM.c_current;
+          shellyDevice.grids[2].watt = ShellyEM.c_act_power;
+        }
+
+        shellyDevice.gridWatt = ShellyEM.total_act_power;
+      }
+
+      if(ShellyEMData){
+        //TODO handle calucate more save
+        shellyDevice.grids[0].totalConsumptionKWH = ShellyEMData.a_total_act_energy / 1000;
+        shellyDevice.grids[0].totalFeedInKWH = ShellyEMData.a_total_act_ret_energy / 1000;
+
+        shellyDevice.grids[1].totalConsumptionKWH = ShellyEMData.b_total_act_energy / 1000;
+        shellyDevice.grids[1].totalFeedInKWH = ShellyEMData.b_total_act_ret_energy / 1000;
+
+        shellyDevice.grids[2].totalConsumptionKWH = ShellyEMData.c_total_act_energy / 1000;
+        shellyDevice.grids[2].totalFeedInKWH = ShellyEMData.c_total_act_ret_energy / 1000;
+
+        shellyDevice.gridTotalConsumptionKWH = ShellyEMData.total_act / 1000;
+        shellyDevice.gridTotalFeedInKWH = ShellyEMData.total_act_ret / 1000;
+      }
+
+      log("Shelly parsed data: " + JSON.stringify(shellyDevice),true)
+      callback(shellyDevice)
+    });
+  });
+}
+
+
 function runScript() {
   if(typeof host !== 'string' || host === ""){
     log("Main script no run -> Hostname or ip not set, scanning?: "+scanRunning,false);
@@ -190,39 +257,45 @@ function runScript() {
     lastSeenDevice = Shelly.getUptimeMs();
 
     let payload = parseZendureData(response);
-    let toSend = JSON.stringify(payload)
 
-    log("sendData: "+toSend,true);
+    getShellyData(function(shellyDevice){
 
-    Shelly.call("HTTP.Request", {
-      method: "POST",
-      url: ONLINE_URL_1+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
-      timeout: 10,
-      headers: {
-        "Content-Type": "application/json",
-        "clientToken": ONLINE_CLIENT_TOKEN
-      },
-      body: toSend
-    }, function(result, err_code, err_msg) {
-      if(!handlePostResult(ONLINE_URL_1,result,err_code,err_msg)){
-        //try second domain
-        if(!ONLINE_URL_2){
-          log("No Second Domain defined",true);
-          return;
+      payload.devices.push(shellyDevice);
+
+      let toSend = JSON.stringify(payload)
+
+      log("sendData: "+toSend,false);
+
+      Shelly.call("HTTP.Request", {
+        method: "POST",
+        url: ONLINE_URL_1+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
+        timeout: 10,
+        headers: {
+          "Content-Type": "application/json",
+          "clientToken": ONLINE_CLIENT_TOKEN
+        },
+        body: toSend
+      }, function(result, err_code, err_msg) {
+        if(!handlePostResult(ONLINE_URL_1,result,err_code,err_msg)){
+          //try second domain
+          if(!ONLINE_URL_2){
+            log("No Second Domain defined",true);
+            return;
+          }
+          Shelly.call("HTTP.Request", {
+            method: "POST",
+            timeout: 10,
+            url: ONLINE_URL_2+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
+            headers: {
+              "Content-Type": "application/json",
+              "clientToken": ONLINE_CLIENT_TOKEN
+            },
+            body: toSend
+          }, function(result, err_code, err_msg) {
+            handlePostResult(ONLINE_URL_2,result,err_code,err_msg);
+          });
         }
-        Shelly.call("HTTP.Request", {
-          method: "POST",
-          timeout: 10,
-          url: ONLINE_URL_2+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
-          headers: {
-            "Content-Type": "application/json",
-            "clientToken": ONLINE_CLIENT_TOKEN
-          },
-          body: toSend
-        }, function(result, err_code, err_msg) {
-          handlePostResult(ONLINE_URL_2,result,err_code,err_msg);
-        });
-      }
+      });
     });
   });
 }
