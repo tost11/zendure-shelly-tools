@@ -41,6 +41,7 @@ if(!CHECK_WIFI_AP){throw new Error("Variable: CHECK_WIFI_AP is required");}
 if(!CHECK_WIFI_STA){throw new Error("Variable: CHECK_WIFI_STA is required");}
 if(!CHECK_ETH){throw new Error("Variable: CHECK_ETH is required");}
 
+
 function log(message, debug) {
   if (!debug || DEBUG) {
     let prefix = "[" + Shelly.getUptimeMs() + " Zendure Online Monitoring]: ";
@@ -59,7 +60,6 @@ function isDeviceReachable(){
 // Parsing Funktion mit sauberem Entfernen von Null- und 0-Werten
 function parseZendureData(resp) {
   let p = resp.properties || {};
-  let now = Date.now();
 
   let inputsDC = [];
   for (let i = 1; i <= 6; i++) {
@@ -118,11 +118,7 @@ function parseZendureData(resp) {
   if (batteries.length) device.batteries = batteries;
   if (outputsAC.length) device.outputsAC = outputsAC;
 
-  return {
-    duration: DATA_DURATION,
-    timestamp: now,
-    devices: [device]
-  };
+  return device;
 }
 
 function tryLogMessageIfPossible(body){
@@ -191,18 +187,21 @@ function getShellyData(callback) {
           shellyDevice.grids[0].voltage = ShellyEM.a_voltage;
           shellyDevice.grids[0].ampere = ShellyEM.a_current;
           shellyDevice.grids[0].watt = ShellyEM.a_act_power;
+          shellyDevice.grids[0].frequency = ShellyEM.a_freq;
         }
 
         if(ShellyEM.b_voltage > 1){
           shellyDevice.grids[1].voltage = ShellyEM.b_voltage;
           shellyDevice.grids[1].ampere = ShellyEM.b_current;
           shellyDevice.grids[1].watt = ShellyEM.b_act_power;
+          shellyDevice.grids[1].frequency = ShellyEM.b_freq;
         }
 
         if(ShellyEM.c_voltage > 1){
           shellyDevice.grids[2].voltage = ShellyEM.c_voltage;
           shellyDevice.grids[2].ampere = ShellyEM.c_current;
           shellyDevice.grids[2].watt = ShellyEM.c_act_power;
+          shellyDevice.grids[2].frequency = ShellyEM.c_freq;
         }
 
         shellyDevice.gridWatt = ShellyEM.total_act_power;
@@ -210,17 +209,17 @@ function getShellyData(callback) {
 
       if(ShellyEMData){
         //TODO handle calucate more save
-        shellyDevice.grids[0].totalConsumptionKWH = ShellyEMData.a_total_act_energy / 1000;
-        shellyDevice.grids[0].totalFeedInKWH = ShellyEMData.a_total_act_ret_energy / 1000;
+        typeof ShellyEMData.a_total_act_energy === "number" && shellyDevice.grids[0].totalConsumptionKWH = ShellyEMData.a_total_act_energy / 1000;
+        typeof ShellyEMData.a_total_act_energy === "number" && shellyDevice.grids[0].totalFeedInKWH = ShellyEMData.a_total_act_ret_energy / 1000;
 
-        shellyDevice.grids[1].totalConsumptionKWH = ShellyEMData.b_total_act_energy / 1000;
-        shellyDevice.grids[1].totalFeedInKWH = ShellyEMData.b_total_act_ret_energy / 1000;
+        typeof ShellyEMData.b_total_act_energy === "number" && shellyDevice.grids[1].totalConsumptionKWH = ShellyEMData.b_total_act_energy / 1000;
+        typeof ShellyEMData.b_total_act_ret_energy === "number" && shellyDevice.grids[1].totalFeedInKWH = ShellyEMData.b_total_act_ret_energy / 1000;
 
-        shellyDevice.grids[2].totalConsumptionKWH = ShellyEMData.c_total_act_energy / 1000;
-        shellyDevice.grids[2].totalFeedInKWH = ShellyEMData.c_total_act_ret_energy / 1000;
+        typeof ShellyEMData.c_total_act_energy === "number" && shellyDevice.grids[2].totalConsumptionKWH = ShellyEMData.c_total_act_energy / 1000;
+        typeof ShellyEMData.c_total_act_ret_energy === "number" && shellyDevice.grids[2].totalFeedInKWH = ShellyEMData.c_total_act_ret_energy / 1000;
 
-        shellyDevice.gridTotalConsumptionKWH = ShellyEMData.total_act / 1000;
-        shellyDevice.gridTotalFeedInKWH = ShellyEMData.total_act_ret / 1000;
+        typeof ShellyEMData.total_act === "number" && shellyDevice.gridTotalConsumptionKWH = ShellyEMData.total_act / 1000;
+        typeof ShellyEMData.total_act_ret === "number" && shellyDevice.gridTotalFeedInKWH = ShellyEMData.total_act_ret / 1000;
       }
 
       log("Shelly parsed data: " + JSON.stringify(shellyDevice),true)
@@ -229,15 +228,65 @@ function getShellyData(callback) {
   });
 }
 
+function runSecondPartOfScript(payload){
+
+  getShellyData(function(shellyDevice){
+
+    payload.devices.push(shellyDevice);
+
+    let toSend = JSON.stringify(payload)
+
+    log("sendData: "+toSend,false);
+
+    Shelly.call("HTTP.Request", {
+      method: "POST",
+      url: ONLINE_URL_1+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
+      timeout: 10,
+      headers: {
+        "Content-Type": "application/json",
+        "clientToken": ONLINE_CLIENT_TOKEN
+      },
+      body: toSend
+    }, function(result, err_code, err_msg) {
+      if(!handlePostResult(ONLINE_URL_1,result,err_code,err_msg)){
+        //try second domain
+        if(!ONLINE_URL_2){
+          log("No Second Domain defined",true);
+          return;
+        }
+        Shelly.call("HTTP.Request", {
+          method: "POST",
+          timeout: 10,
+          url: ONLINE_URL_2+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
+          headers: {
+            "Content-Type": "application/json",
+            "clientToken": ONLINE_CLIENT_TOKEN
+          },
+          body: toSend
+        }, function(result, err_code, err_msg) {
+          handlePostResult(ONLINE_URL_2,result,err_code,err_msg);
+        });
+      }
+    });
+  });
+}
 
 function runScript() {
+  var payload = {
+    duration: DATA_DURATION,
+    timestamp: Date.now(),
+    devices: []
+  };
+
   if(typeof host !== 'string' || host === ""){
-    log("Main script no run -> Hostname or ip not set, scanning?: "+scanRunning,false);
+    log("Main script no run -> Hostname or ip not set, scanning? -> continue with shelly data only: "+scanRunning,false);
+    runSecondPartOfScript(payload);
     return;
   }
   Shelly.call("HTTP.GET", {url: "http://" + host + "/properties/report",timeout: 5},function(result, err_code, err_msg) {
     if (err_code !== 0 || result.code !== 200 || !result.body) {
       log("error while getting status of power station, no post performed: " + err_code + " " + err_msg,false);
+      runSecondPartOfScript(payload);
       return;
     }
 
@@ -251,52 +300,13 @@ function runScript() {
     if (!response || !response.properties || !response.messageId || !response.product || response.sn !== SERIAL) {
       log("Could not get value from request response (maybe it is not a zendure response or Serial (SN) is wrong)",false);
       log("Response: "+response,true);
+      runSecondPartOfScript(payload);
       return;
     }
-
+    //set zendure data to our send payload
     lastSeenDevice = Shelly.getUptimeMs();
-
-    let payload = parseZendureData(response);
-
-    getShellyData(function(shellyDevice){
-
-      payload.devices.push(shellyDevice);
-
-      let toSend = JSON.stringify(payload)
-
-      log("sendData: "+toSend,false);
-
-      Shelly.call("HTTP.Request", {
-        method: "POST",
-        url: ONLINE_URL_1+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
-        timeout: 10,
-        headers: {
-          "Content-Type": "application/json",
-          "clientToken": ONLINE_CLIENT_TOKEN
-        },
-        body: toSend
-      }, function(result, err_code, err_msg) {
-        if(!handlePostResult(ONLINE_URL_1,result,err_code,err_msg)){
-          //try second domain
-          if(!ONLINE_URL_2){
-            log("No Second Domain defined",true);
-            return;
-          }
-          Shelly.call("HTTP.Request", {
-            method: "POST",
-            timeout: 10,
-            url: ONLINE_URL_2+"/api/solar/data?systemId="+ONLINE_SYSTEM_ID,
-            headers: {
-              "Content-Type": "application/json",
-              "clientToken": ONLINE_CLIENT_TOKEN
-            },
-            body: toSend
-          }, function(result, err_code, err_msg) {
-            handlePostResult(ONLINE_URL_2,result,err_code,err_msg);
-          });
-        }
-      });
-    });
+    payload.devices.push(parseZendureData(response));
+    runSecondPartOfScript(payload);
   });
 }
 
