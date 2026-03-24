@@ -236,7 +236,7 @@ function runSecondPartOfScript(payload){
 
     let toSend = JSON.stringify(payload)
 
-    log("sendData: "+toSend,false);
+    log("sendData: "+toSend,true);
 
     Shelly.call("HTTP.Request", {
       method: "POST",

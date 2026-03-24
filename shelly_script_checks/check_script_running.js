@@ -1,35 +1,18 @@
-let TARGET_SCRIPT_NAME = "INSERT OTHER SCRIPT NAME HERE";
+let TARGET_SCRIPT_NAMES = [
+  "__auto_zendure-online-monit-find_",
+  "__auto_zendure-power-control-find_"
+];
 let CHECK_INTERVAL_MS = 60 * 1000;
 let DEBUG = false;
+
+if(!TARGET_SCRIPT_NAMES || TARGET_SCRIPT_NAMES.length === 0){
+  throw new Error("Variable: TARGET_SCRIPT_NAMES must contain at least one script name");
+}
 
 function log(message, debug) {
     if (!debug || DEBUG) {
         print("[" + Shelly.getUptimeMs() + " Script Restart Checker]: " + message);
     }
-}
-
-function findScriptByName(name, callback) {
-    Shelly.call("Script.List", null, function(response, error_code, error_msg) {
-        if (error_code !== 0) {
-            log("Error calling Script.List: " + error_msg, false);
-            callback(null);
-            return;
-        }
-        if (!response || !response.scripts) {
-            log("Unexpected response to Script.List", false);
-            callback(null);
-            return;
-        }
-        for (let i = 0; i < response.scripts.length; i++) {
-            let sc = response.scripts[i];
-            if (sc.name === name) {
-                callback(sc);
-                return;
-            }
-        }
-        log("Script with name '" + name + "' not found.", false);
-        callback(null);
-    });
 }
 
 function ensureScriptHasCodeAndStart(id, name) {
@@ -57,17 +40,41 @@ function ensureScriptHasCodeAndStart(id, name) {
 }
 
 function checkAndRecover() {
-    findScriptByName(TARGET_SCRIPT_NAME, function(scriptInfo) {
-        if (!scriptInfo) {
+    Shelly.call("Script.List", null, function(response, error_code, error_msg) {
+        if (error_code !== 0) {
+            log("Error calling Script.List: " + error_msg, false);
+            return;
+        }
+        if (!response || !response.scripts) {
+            log("Unexpected response to Script.List", false);
             return;
         }
 
-        let id = scriptInfo.id;
-        if (scriptInfo.running) {
-            log("Script '" + TARGET_SCRIPT_NAME + "' (id " + id + ") is running.", true);
-        } else {
-            log("Script '" + TARGET_SCRIPT_NAME + "' (id " + id + ") is NOT running. Attempting restart.", false);
-            ensureScriptHasCodeAndStart(id, TARGET_SCRIPT_NAME);
+        // Check each target script
+        for (var i = 0; i < TARGET_SCRIPT_NAMES.length; i++) {
+            var targetName = TARGET_SCRIPT_NAMES[i];
+            var found = false;
+
+            // Find matching script in list
+            for (var j = 0; j < response.scripts.length; j++) {
+                var sc = response.scripts[j];
+                if (sc.name.indexOf(targetName) === 0) {
+                    found = true;
+                    var id = sc.id;
+
+                    if (sc.running) {
+                        log("Script '" + sc.name + "' (id " + id + ") is running.", true);
+                    } else {
+                        log("Script '" + sc.name + "' (id " + id + ") is NOT running. Attempting restart.", false);
+                        ensureScriptHasCodeAndStart(id, sc.name);
+                    }
+                    break;
+                }
+            }
+
+            if (!found) {
+                log("Script starting with '" + targetName + "' not found.", false);
+            }
         }
     });
 }
