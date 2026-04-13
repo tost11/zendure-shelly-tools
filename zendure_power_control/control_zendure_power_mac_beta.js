@@ -132,7 +132,8 @@ function setLimit(shellyPower,currentDevicePower,batteryPercent,minBatteryPercen
         properties: {
             acMode: acMode,
             outputLimit: outputLimit,
-            inputLimit: inputLimit
+            inputLimit: inputLimit,
+            smartMode: 1
         }
     };
 
